@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScholarRAG — Production-Grade Hybrid RAG Studio</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Marked.js (Markdown parser) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Top App Navigation -->
+        <header class="navbar">
+            <div class="nav-brand">
+                <div class="logo-box">
+                    <i data-lucide="brain-circuit" class="logo-icon"></i>
+                </div>
+                <div>
+                    <h1 class="brand-title">Scholar<span>RAG</span></h1>
+                    <p class="brand-badge">HYBRID RETRIEVAL & RE-RANKING STUDIO</p>
+                </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="nav-stats">
+                <div class="stat-pill" title="Total Indexed Papers">
+                    <i data-lucide="file-text" class="stat-icon"></i>
+                    <span class="stat-val" id="stat-papers">0</span>
+                    <span class="stat-lbl">Papers</span>
+                </div>
+                <div class="stat-pill" title="Total Chunks in Vector DB">
+                    <i data-lucide="layers" class="stat-icon"></i>
+                    <span class="stat-val" id="stat-chunks">0</span>
+                    <span class="stat-lbl">Chunks</span>
+                </div>
+                <div class="stat-pill" title="FastEmbed ONNX Engine">
+                    <i data-lucide="cpu" class="stat-icon"></i>
+                    <span class="stat-val">BGE-Small</span>
+                    <span class="stat-lbl">ONNX Dense</span>
+                </div>
+                <div class="stat-pill" title="FlashRank Cross-Encoder">
+                    <i data-lucide="sparkles" class="stat-icon"></i>
+                    <span class="stat-val">FlashRank</span>
+                    <span class="stat-lbl">Re-Ranker</span>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="nav-actions">
+                <button id="btn-open-settings" class="btn btn-glass" title="API Settings">
+                    <i data-lucide="key" class="btn-icon"></i>
+                    <span id="api-status-text">API Key</span>
+                    <span class="status-dot" id="api-status-dot"></span>
+                </button>
+                <a href="https://github.com/soujanya-7/ScholarRAG" target="_blank" class="btn btn-glass" title="GitHub Repository">
+                    <i data-lucide="github" class="btn-icon"></i>
+                    <span>GitHub</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Body Grid -->
+        <div class="main-container">
+            <!-- Left Sidebar Controls -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <div class="section-header">
+                        <h3><i data-lucide="upload-cloud"></i> Paper Ingestion</h3>
+                    </div>
+                    <div class="dropzone" id="dropzone">
+                        <input type="file" id="file-input" accept=".pdf,.md,.txt" multiple hidden>
+                        <i data-lucide="file-up" class="dropzone-icon"></i>
+                        <p class="dropzone-title">Drag & drop research papers</p>
+                        <p class="dropzone-subtitle">PDF, Markdown, or TXT</p>
+                        <button class="btn btn-sm btn-primary" onclick="document.getElementById('file-input').click()">
+                            Browse Files
+                        </button>
+                    </div>
+
+                    <button id="btn-load-sample" class="btn btn-accent btn-block mt-3">
+                        <i data-lucide="sparkles"></i> Load Transformer Paper
+                    </button>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="section-header">
+                        <h3><i data-lucide="library"></i> Indexed Library</h3>
+                        <span class="badge" id="library-count">0 Docs</span>
+                    </div>
+                    <div class="paper-list" id="paper-list">
+                        <div class="empty-state-sm">No documents indexed yet</div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="section-header">
+                        <h3><i data-lucide="sliders"></i> Hyperparameters</h3>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="retrieval-mode-select">Default Strategy</label>
+                        <select id="retrieval-mode-select" class="select-input">
+                            <option value="hybrid_rerank" selected>🌟 Hybrid + Cross-Encoder Rerank</option>
+                            <option value="hybrid">⚡ Hybrid (Dense + BM25 RRF)</option>
+                            <option value="dense">🔵 Dense Vector Search Only</option>
+                            <option value="bm25">🟠 BM25 Sparse Keyword Only</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="slider-header">
+                            <label>Top Candidates (Stage 1)</label>
+                            <span class="slider-value" id="top-k-val">8</span>
+                        </div>
+                        <input type="range" id="top-k-slider" min="2" max="20" value="8" class="range-slider">
+                    </div>
+
+                    <div class="control-group">
+                        <div class="slider-header">
+                            <label>Context to LLM (Stage 2)</label>
+                            <span class="slider-value" id="top-n-val">4</span>
+                        </div>
+                        <input type="range" id="top-n-slider" min="1" max="8" value="4" class="range-slider">
+                    </div>
+
+                    <div class="control-group toggle-group">
+                        <div>
+                            <label>Enable HyDE Alignment</label>
+                            <p class="control-desc">Hypothetical Doc Embeddings</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="hyde-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <button id="btn-clear-corpus" class="btn btn-outline-danger btn-block mt-4">
+                        <i data-lucide="trash-2"></i> Reset Knowledge Base
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Work Area -->
+            <main class="content-area">
+                <!-- Navigation Tabs -->
+                <nav class="content-tabs">
+                    <button class="tab-btn active" data-tab="tab-chat">
+                        <i data-lucide="message-square"></i> Grounded Chat Studio
+                    </button>
+                    <button class="tab-btn" data-tab="tab-inspector">
+                        <i data-lucide="microscope"></i> Strategy Benchmark Inspector
+                    </button>
+                    <button class="tab-btn" data-tab="tab-chunks">
+                        <i data-lucide="table"></i> Chunk Vector Explorer
+                    </button>
+                    <button class="tab-btn" data-tab="tab-guide">
+                        <i data-lucide="graduation-cap"></i> Concepts & Architecture
+                    </button>
+                </nav>
+
+                <!-- TAB 1: Grounded Chat Studio -->
+                <section id="tab-chat" class="tab-content active">
+                    <div class="chat-container">
+                        <!-- Quick Prompts -->
+                        <div class="quick-prompts-bar">
+                            <span class="quick-prompt-label"><i data-lucide="zap"></i> Quick Questions:</span>
+                            <button class="prompt-chip" data-query="What optimizer parameters and warmup steps were used?">
+                                ⚡ Optimizer & Warmup Steps
+                            </button>
+                            <button class="prompt-chip" data-query="How does the model represent sequence order without recurrence?">
+                                📐 Positional Encoding
+                            </button>
+                            <button class="prompt-chip" data-query="What is the formula for scaled dot-product attention and why is scaling applied?">
+                                🎯 Scaled Dot-Product Formula
+                            </button>
+                            <button class="prompt-chip" data-query="What BLEU score was achieved on WMT 2014 English-to-German?">
+                                🏆 BLEU Score Results
+                            </button>
+                        </div>
+
+                        <!-- Chat Messages Window -->
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="chat-message assistant-message">
+                                <div class="msg-avatar">
+                                    <i data-lucide="sparkles"></i>
+                                </div>
+                                <div class="msg-body">
+                                    <div class="msg-header">
+                                        <span class="msg-author">ScholarRAG Assistant</span>
+                                        <span class="msg-tag">Grounded Model</span>
+                                    </div>
+                                    <div class="msg-content">
+                                        <p>Hello! I am your research assistant. Upload a scientific paper or load our sample paper on <b>Transformers</b> in the sidebar, then ask me any question.</p>
+                                        <p>I will retrieve the exact relevant sections, re-rank them with cross-encoder attention, and generate an answer strictly cited with verifiable page numbers.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chat Input Box -->
+                        <div class="chat-input-wrapper">
+                            <div class="input-glass-box">
+                                <textarea id="chat-input" placeholder="Ask a technical question about your indexed papers..." rows="1"></textarea>
+                                <button id="btn-send-chat" class="btn btn-primary btn-icon-only" title="Send Question">
+                                    <i data-lucide="send"></i>
+                                </button>
+                            </div>
+                            <div class="chat-footer-info">
+                                <span><i data-lucide="shield-check"></i> Strict Grounding & Citation Guardrails Active</span>
+                                <span id="pipeline-active-tag">Strategy: Hybrid + Re-Ranker</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 2: Strategy Benchmark Inspector -->
+                <section id="tab-inspector" class="tab-content">
+                    <div class="inspector-container">
+                        <div class="inspector-header">
+                            <div>
+                                <h2>Multi-Strategy Retrieval Benchmark</h2>
+                                <p>Compare how <b>Dense Vector</b>, <b>BM25 Keyword</b>, <b>Hybrid RRF</b>, and <b>Cross-Encoder Re-Ranking</b> evaluate the exact same query.</p>
+                            </div>
+                            <div class="inspector-search-bar">
+                                <input type="text" id="inspector-query-input" value="What is the formula for scaled dot-product attention and why is scaling applied?" placeholder="Enter query for benchmark...">
+                                <button id="btn-run-benchmark" class="btn btn-primary">
+                                    <i data-lucide="play"></i> Run Comparison
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 4-Column Strategy Grid -->
+                        <div class="benchmark-grid" id="benchmark-grid">
+                            <!-- Dense Column -->
+                            <div class="strategy-col" id="col-dense">
+                                <div class="col-header col-dense-header">
+                                    <div class="col-title">
+                                        <i data-lucide="circle-dot"></i>
+                                        <h4>Dense Vector Only</h4>
+                                    </div>
+                                    <span class="col-timer" id="dense-timer">-- ms</span>
+                                </div>
+                                <div class="col-desc">Bi-Encoder Cosine Sim ($D=384$)</div>
+                                <div class="col-cards" id="dense-cards">
+                                    <div class="empty-state">Run a benchmark to see results</div>
+                                </div>
+                            </div>
+
+                            <!-- BM25 Column -->
+                            <div class="strategy-col" id="col-bm25">
+                                <div class="col-header col-bm25-header">
+                                    <div class="col-title">
+                                        <i data-lucide="hash"></i>
+                                        <h4>BM25 Sparse Only</h4>
+                                    </div>
+                                    <span class="col-timer" id="bm25-timer">-- ms</span>
+                                </div>
+                                <div class="col-desc">Exact Term Frequency & IDF</div>
+                                <div class="col-cards" id="bm25-cards">
+                                    <div class="empty-state">Run a benchmark to see results</div>
+                                </div>
+                            </div>
+
+                            <!-- Hybrid RRF Column -->
+                            <div class="strategy-col" id="col-hybrid">
+                                <div class="col-header col-hybrid-header">
+                                    <div class="col-title">
+                                        <i data-lucide="git-merge"></i>
+                                        <h4>Hybrid (RRF Fusion)</h4>
+                                    </div>
+                                    <span class="col-timer" id="hybrid-timer">-- ms</span>
+                                </div>
+                                <div class="col-desc">Reciprocal Rank Fusion ($k=60$)</div>
+                                <div class="col-cards" id="hybrid-cards">
+                                    <div class="empty-state">Run a benchmark to see results</div>
+                                </div>
+                            </div>
+
+                            <!-- Cross-Encoder Rerank Column -->
+                            <div class="strategy-col" id="col-rerank">
+                                <div class="col-header col-rerank-header">
+                                    <div class="col-title">
+                                        <i data-lucide="sparkles"></i>
+                                        <h4>Hybrid + Re-Ranker</h4>
+                                    </div>
+                                    <span class="col-timer" id="rerank-timer">-- ms</span>
+                                </div>
+                                <div class="col-desc">FlashRank Cross-Encoder Attention</div>
+                                <div class="col-cards" id="rerank-cards">
+                                    <div class="empty-state">Run a benchmark to see results</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 3: Chunk Vector Explorer -->
+                <section id="tab-chunks" class="tab-content">
+                    <div class="explorer-container">
+                        <div class="explorer-header">
+                            <div>
+                                <h2>Vector Database & Chunk Explorer</h2>
+                                <p>Inspect raw indexed text chunks, token lengths, and attached metadata.</p>
+                            </div>
+                            <div class="explorer-filter-bar">
+                                <input type="text" id="chunk-search-input" placeholder="Search chunk text or ID...">
+                                <select id="chunk-source-filter" class="select-input">
+                                    <option value="all">All Documents</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="chunks-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 80px;">Index</th>
+                                        <th style="width: 180px;">Chunk ID</th>
+                                        <th style="width: 140px;">Source Doc</th>
+                                        <th style="width: 90px;">Page</th>
+                                        <th style="width: 90px;">Chars</th>
+                                        <th>Text Excerpt</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="chunks-table-body">
+                                    <tr>
+                                        <td colspan="6" class="text-center">No chunks loaded</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 4: Concepts & Architecture -->
+                <section id="tab-guide" class="tab-content">
+                    <div class="guide-container">
+                        <div class="guide-hero">
+                            <h2>The ScholarRAG Engineering Architecture</h2>
+                            <p>Everything you need to know to master and explain this project in AI engineering interviews.</p>
+                        </div>
+
+                        <div class="concept-cards-grid">
+                            <div class="concept-card">
+                                <div class="concept-icon"><i data-lucide="layers"></i></div>
+                                <h3>1. Layout-Aware Parsing & Chunking</h3>
+                                <p>Instead of naive character splitting which breaks equations and tables, ScholarRAG parses PDFs page-by-page, preserving section hierarchies, page numbers, and applying recursive splitting with a 120-character overlap.</p>
+                            </div>
+
+                            <div class="concept-card">
+                                <div class="concept-icon"><i data-lucide="split"></i></div>
+                                <h3>2. Bi-Encoders vs. Cross-Encoders</h3>
+                                <p><b>Bi-Encoders</b> (FastEmbed BGE) embed query and document separately for lightning fast $O(1)$ vector retrieval. <b>Cross-Encoders</b> (FlashRank) take Query + Document jointly into transformer layers to compute deep token-to-token cross-attention.</p>
+                            </div>
+
+                            <div class="concept-card">
+                                <div class="concept-icon"><i data-lucide="git-merge"></i></div>
+                                <h3>3. Reciprocal Rank Fusion (RRF)</h3>
+                                <p>Dense vector search produces cosine similarities $\in [0, 1]$, while BM25 produces unbounded scores $[0, \infty)$. RRF combines their rank distributions without fragile score normalization:</p>
+                                <div class="math-box">$$RRF(d) = \sum_{m \in M} \frac{1}{k + \text{rank}_m(d)}$$</div>
+                            </div>
+
+                            <div class="concept-card">
+                                <div class="concept-icon"><i data-lucide="lightbulb"></i></div>
+                                <h3>4. HyDE (Hypothetical Doc Embeddings)</h3>
+                                <p>Questions are short; documents are long and explanatory. HyDE prompts the LLM to write a hypothetical excerpt first, embedding that answer to land directly inside the document vector cluster.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-backdrop" id="settings-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3><i data-lucide="settings"></i> System & API Configuration</h3>
+                <button class="modal-close" id="btn-close-settings">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Google Gemini API Key</label>
+                    <input type="password" id="gemini-key-input" placeholder="AIzaSy..." class="text-input">
+                    <p class="form-hint">Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>. Key is saved for your session.</p>
+                </div>
+                <div class="form-group">
+                    <label>Dense Embedding Model</label>
+                    <input type="text" value="BAAI/bge-small-en-v1.5 (Local ONNX CPU)" disabled class="text-input disabled">
+                </div>
+                <div class="form-group">
+                    <label>Re-Ranker Model</label>
+                    <input type="text" value="FlashRank ms-marco-TinyBERT-L-2-v2 (Local ONNX)" disabled class="text-input disabled">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-glass" id="btn-cancel-settings">Cancel</button>
+                <button class="btn btn-primary" id="btn-save-settings">Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Excerpt Modal -->
+    <div class="modal-backdrop" id="excerpt-modal">
+        <div class="modal-card modal-lg">
+            <div class="modal-header">
+                <h3 id="excerpt-modal-title"><i data-lucide="file-text"></i> Source Excerpt</h3>
+                <button class="modal-close" id="btn-close-excerpt">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="excerpt-meta-banner" id="excerpt-modal-meta"></div>
+                <div class="excerpt-code-view" id="excerpt-modal-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
