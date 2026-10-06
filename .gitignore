@@ -1,0 +1,25 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment Variables & Secrets
+.env
+*.env.local
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# ChromaDB & Local Data / Cache
+data/
+*.chroma
+.cache/
+
+# IDE & OS files
+.DS_Store
+.vscode/
+.idea/
