@@ -1,9 +1,9 @@
 /**
- * ScholarRAG Studio Interactive Frontend Logic
+ * ScholarRAG Studio — Interactive Frontend Logic (Vanguard Tier)
  */
 
 document.addEventListener("DOMContentLoaded", () => {
-    // State
+    // Application State
     const state = {
         apiKey: localStorage.getItem("scholar_rag_api_key") || "",
         stats: null,
@@ -35,14 +35,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const topNVal = document.getElementById("top-n-val");
     const hydeToggle = document.getElementById("hyde-toggle");
 
-    const tabBtns = document.querySelectorAll(".tab-btn");
-    const tabContents = document.querySelectorAll(".tab-content");
+    const tabBtns = document.querySelectorAll(".tab-pill");
+    const tabContents = document.querySelectorAll(".tab-panel");
 
     // Chat Elements
     const chatMessages = document.getElementById("chat-messages");
     const chatInput = document.getElementById("chat-input");
     const btnSendChat = document.getElementById("btn-send-chat");
-    const promptChips = document.querySelectorAll(".prompt-chip");
+    const promptPills = document.querySelectorAll(".prompt-pill");
 
     // Inspector Elements
     const inspectorQueryInput = document.getElementById("inspector-query-input");
@@ -84,11 +84,11 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await res.json();
             state.stats = data;
 
-            statPapers.textContent = data.total_documents;
-            statChunks.textContent = data.total_chunks;
-            libraryCount.textContent = `${data.total_documents} Docs`;
+            if (statPapers) statPapers.textContent = data.total_documents;
+            if (statChunks) statChunks.textContent = data.total_chunks;
+            if (libraryCount) libraryCount.textContent = `${data.total_documents} Docs`;
 
-            // Check API key
+            // Check API key status
             const hasKey = data.has_api_key || !!state.apiKey;
             if (hasKey) {
                 apiStatusDot.classList.add("active");
@@ -98,7 +98,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 apiStatusText.textContent = "Set API Key";
             }
 
-            // Populate Library List
             renderLibraryList(data.documents);
         } catch (err) {
             console.error("Failed to fetch stats:", err);
@@ -107,22 +106,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function renderLibraryList(docs) {
         if (!docs || docs.length === 0) {
-            paperList.innerHTML = `<div class="empty-state-sm">No documents indexed yet</div>`;
+            paperList.innerHTML = `<div class="empty-state-micro">No documents indexed yet</div>`;
             return;
         }
 
         paperList.innerHTML = docs.map(doc => `
-            <div class="paper-item">
-                <span class="paper-item-name" title="${doc.source}">📄 ${doc.source}</span>
-                <span class="paper-item-meta">${doc.total_chunks} chunks · ${doc.total_pages}p</span>
+            <div class="paper-row">
+                <span class="paper-name" title="${doc.source}">📄 ${doc.source}</span>
+                <span class="paper-stats-mono">${doc.total_chunks}c · ${doc.total_pages}p</span>
             </div>
         `).join("");
 
-        // Also update chunk filter options
+        // Populate chunk filter
         const sources = ["all", ...docs.map(d => d.source)];
-        chunkSourceFilter.innerHTML = sources.map(s => `
-            <option value="${s}">${s === "all" ? "All Documents" : s}</option>
-        `).join("");
+        if (chunkSourceFilter) {
+            chunkSourceFilter.innerHTML = sources.map(s => `
+                <option value="${s}">${s === "all" ? "All Documents" : s}</option>
+            `).join("");
+        }
     }
 
     // ==========================================
@@ -147,25 +148,33 @@ document.addEventListener("DOMContentLoaded", () => {
     // ==========================================
     // HYPERPARAMETERS
     // ==========================================
-    retrievalSelect.addEventListener("change", (e) => {
-        state.retrievalMode = e.target.value;
-        const tag = document.getElementById("pipeline-active-tag");
-        if (tag) tag.textContent = `Strategy: ${e.target.options[e.target.selectedIndex].text}`;
-    });
+    if (retrievalSelect) {
+        retrievalSelect.addEventListener("change", (e) => {
+            state.retrievalMode = e.target.value;
+            const tag = document.getElementById("pipeline-active-tag");
+            if (tag) tag.textContent = `Strategy: ${e.target.options[e.target.selectedIndex].text.split("(")[0].trim()}`;
+        });
+    }
 
-    topKSlider.addEventListener("input", (e) => {
-        state.topK = parseInt(e.target.value);
-        topKVal.textContent = state.topK;
-    });
+    if (topKSlider) {
+        topKSlider.addEventListener("input", (e) => {
+            state.topK = parseInt(e.target.value);
+            topKVal.textContent = state.topK;
+        });
+    }
 
-    topNSlider.addEventListener("input", (e) => {
-        state.topN = parseInt(e.target.value);
-        topNVal.textContent = state.topN;
-    });
+    if (topNSlider) {
+        topNSlider.addEventListener("input", (e) => {
+            state.topN = parseInt(e.target.value);
+            topNVal.textContent = state.topN;
+        });
+    }
 
-    hydeToggle.addEventListener("change", (e) => {
-        state.useHyde = e.target.checked;
-    });
+    if (hydeToggle) {
+        hydeToggle.addEventListener("change", (e) => {
+            state.useHyde = e.target.checked;
+        });
+    }
 
     // ==========================================
     // DOCUMENT INGESTION (Upload & Sample)
@@ -194,55 +203,65 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    fileInput.addEventListener("change", (e) => {
-        if (e.target.files.length > 0) {
-            Array.from(e.target.files).forEach(uploadFile);
-        }
-    });
-
-    dropzone.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        dropzone.classList.add("dragover");
-    });
-    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
-    dropzone.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dropzone.classList.remove("dragover");
-        if (e.dataTransfer.files.length > 0) {
-            Array.from(e.dataTransfer.files).forEach(uploadFile);
-        }
-    });
-
-    btnLoadSample.addEventListener("click", async () => {
-        btnLoadSample.disabled = true;
-        btnLoadSample.innerHTML = `<i data-lucide="loader" class="spin"></i> Indexing...`;
-        try {
-            const res = await fetch("/api/load-sample", { method: "POST" });
-            const data = await res.json();
-            if (data.status === "success") {
-                await fetchStats();
-                showToast("Sample paper 'Attention Is All You Need' indexed!");
+    if (fileInput) {
+        fileInput.addEventListener("change", (e) => {
+            if (e.target.files.length > 0) {
+                Array.from(e.target.files).forEach(uploadFile);
             }
-        } catch (err) {
-            alert("Failed to load sample: " + err.message);
-        } finally {
-            btnLoadSample.disabled = false;
-            btnLoadSample.innerHTML = `<i data-lucide="sparkles"></i> Load Transformer Paper`;
-            lucide.createIcons();
-        }
-    });
+        });
+    }
 
-    btnClearCorpus.addEventListener("click", async () => {
-        if (!confirm("Are you sure you want to clear all indexed documents from ChromaDB and BM25?")) return;
-        try {
-            await fetch("/api/clear", { method: "POST" });
-            await fetchStats();
-            chunksTableBody.innerHTML = `<tr><td colspan="6" class="text-center">No chunks loaded</td></tr>`;
-            showToast("Knowledge base reset!");
-        } catch (err) {
-            alert("Error clearing corpus: " + err.message);
-        }
-    });
+    if (dropzone) {
+        dropzone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            dropzone.classList.add("dragover");
+        });
+        dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+        dropzone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropzone.classList.remove("dragover");
+            if (e.dataTransfer.files.length > 0) {
+                Array.from(e.dataTransfer.files).forEach(uploadFile);
+            }
+        });
+    }
+
+    if (btnLoadSample) {
+        btnLoadSample.addEventListener("click", async () => {
+            btnLoadSample.disabled = true;
+            btnLoadSample.innerHTML = `<span class="btn-label-text">Indexing...</span><span class="btn-icon-tray-sm"><i data-lucide="loader" class="spin"></i></span>`;
+            try {
+                const res = await fetch("/api/load-sample", { method: "POST" });
+                const data = await res.json();
+                if (data.status === "success") {
+                    await fetchStats();
+                    showToast("Sample paper 'Attention Is All You Need' indexed!");
+                }
+            } catch (err) {
+                alert("Failed to load sample: " + err.message);
+            } finally {
+                btnLoadSample.disabled = false;
+                btnLoadSample.innerHTML = `<span class="btn-label-text">✨ Load Transformer Paper</span><span class="btn-icon-tray-sm"><i data-lucide="sparkles"></i></span>`;
+                lucide.createIcons();
+            }
+        });
+    }
+
+    if (btnClearCorpus) {
+        btnClearCorpus.addEventListener("click", async () => {
+            if (!confirm("Are you sure you want to reset all indexed documents from ChromaDB and BM25?")) return;
+            try {
+                await fetch("/api/clear", { method: "POST" });
+                await fetchStats();
+                if (chunksTableBody) {
+                    chunksTableBody.innerHTML = `<tr><td colspan="6" class="text-center-muted">No chunks loaded</td></tr>`;
+                }
+                showToast("Knowledge base reset!");
+            } catch (err) {
+                alert("Error clearing corpus: " + err.message);
+            }
+        });
+    }
 
     // ==========================================
     // GROUNDED CHAT STUDIO
@@ -250,11 +269,9 @@ document.addEventListener("DOMContentLoaded", () => {
     async function sendChatMessage(query) {
         if (!query.trim()) return;
 
-        // Append User Message
         appendMessage("user", query);
         chatInput.value = "";
 
-        // Append Assistant Loading Skeleton
         const loadingId = "msg-loading-" + Date.now();
         appendLoadingMessage(loadingId);
 
@@ -292,43 +309,43 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function appendMessage(role, text) {
-        const msgDiv = document.createElement("div");
-        msgDiv.className = `chat-message ${role}-message`;
-        msgDiv.innerHTML = `
-            <div class="msg-avatar">
+        const bubbleDiv = document.createElement("div");
+        bubbleDiv.className = `chat-bubble ${role}-bubble`;
+        bubbleDiv.innerHTML = `
+            <div class="bubble-avatar">
                 <i data-lucide="${role === 'user' ? 'user' : 'sparkles'}"></i>
             </div>
-            <div class="msg-body">
-                <div class="msg-header">
-                    <span class="msg-author">${role === 'user' ? 'You' : 'ScholarRAG Assistant'}</span>
+            <div class="bubble-body">
+                <div class="bubble-meta">
+                    <span class="bubble-author">${role === 'user' ? 'You' : 'ScholarRAG Assistant'}</span>
                 </div>
-                <div class="msg-content">${marked.parse(text)}</div>
+                <div class="bubble-text">${marked.parse(text)}</div>
             </div>
         `;
-        chatMessages.appendChild(msgDiv);
+        chatMessages.appendChild(bubbleDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
         lucide.createIcons();
     }
 
     function appendLoadingMessage(id) {
-        const msgDiv = document.createElement("div");
-        msgDiv.id = id;
-        msgDiv.className = "chat-message assistant-message";
-        msgDiv.innerHTML = `
-            <div class="msg-avatar">
+        const bubbleDiv = document.createElement("div");
+        bubbleDiv.id = id;
+        bubbleDiv.className = "chat-bubble assistant-bubble";
+        bubbleDiv.innerHTML = `
+            <div class="bubble-avatar">
                 <i data-lucide="sparkles"></i>
             </div>
-            <div class="msg-body">
-                <div class="msg-header">
-                    <span class="msg-author">ScholarRAG Assistant</span>
-                    <span class="msg-tag">Retrieving & Re-Ranking...</span>
+            <div class="bubble-body">
+                <div class="bubble-meta">
+                    <span class="bubble-author">ScholarRAG Assistant</span>
+                    <span class="badge-grounded">Retrieving & Re-Ranking...</span>
                 </div>
-                <div class="msg-content">
-                    <p>Searching vector index, scoring with FlashRank cross-encoder, and formulating grounded citations...</p>
+                <div class="bubble-text">
+                    <p>Searching dense & sparse index, scoring via FlashRank cross-encoder, and formulating citations...</p>
                 </div>
             </div>
         `;
-        chatMessages.appendChild(msgDiv);
+        chatMessages.appendChild(bubbleDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
         lucide.createIcons();
     }
@@ -339,16 +356,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function appendAssistantResponse(data) {
-        const msgDiv = document.createElement("div");
-        msgDiv.className = "chat-message assistant-message";
+        const bubbleDiv = document.createElement("div");
+        bubbleDiv.className = "chat-bubble assistant-bubble";
 
         let citationsHtml = "";
         if (data.sources_cited && data.sources_cited.length > 0) {
             citationsHtml = `
-                <div class="citations-box">
-                    <span style="font-size: 0.7rem; color: var(--text-muted); display: block; width: 100%; margin-bottom: 2px;">📍 Grounded Citations (Click to view excerpt):</span>
-                    ${data.sources_cited.map((s, idx) => `
-                        <button class="citation-chip" data-chunk-id="${s.chunk_id || ''}" data-source="${s.source}" data-page="${s.page_number}">
+                <div class="citations-deck">
+                    <span style="font-size: 0.68rem; color: var(--text-muted); display: block; width: 100%; margin-bottom: 2px;">📍 Verified Citations (Click to inspect source):</span>
+                    ${data.sources_cited.map(s => `
+                        <button class="citation-pill" data-chunk-id="${s.chunk_id || ''}" data-source="${s.source}" data-page="${s.page_number}">
                             <i data-lucide="bookmark"></i> ${s.source} · Page ${s.page_number}
                         </button>
                     `).join("")}
@@ -362,33 +379,31 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
         `;
 
-        msgDiv.innerHTML = `
-            <div class="msg-avatar">
+        bubbleDiv.innerHTML = `
+            <div class="bubble-avatar">
                 <i data-lucide="sparkles"></i>
             </div>
-            <div class="msg-body">
-                <div class="msg-header">
-                    <span class="msg-author">ScholarRAG Assistant</span>
-                    <span class="msg-tag">Grounded Model</span>
+            <div class="bubble-body">
+                <div class="bubble-meta">
+                    <span class="bubble-author">ScholarRAG Assistant</span>
+                    <span class="badge-grounded">Grounded AI Model</span>
                 </div>
-                <div class="msg-content">${marked.parse(data.answer)}</div>
+                <div class="bubble-text">${marked.parse(data.answer)}</div>
                 ${citationsHtml}
                 ${statsHtml}
             </div>
         `;
 
-        chatMessages.appendChild(msgDiv);
+        chatMessages.appendChild(bubbleDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
         lucide.createIcons();
 
-        // Attach citation click handlers
-        msgDiv.querySelectorAll(".citation-chip").forEach(chip => {
+        bubbleDiv.querySelectorAll(".citation-pill").forEach(chip => {
             chip.addEventListener("click", () => {
                 const chunkId = chip.dataset.chunkId;
                 const source = chip.dataset.source;
                 const page = chip.dataset.page;
 
-                // Find corresponding chunk
                 const chunk = (data.retrieved_chunks || []).find(c => c.chunk_id === chunkId) || {
                     source: source,
                     page_number: page,
@@ -399,17 +414,21 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    btnSendChat.addEventListener("click", () => sendChatMessage(chatInput.value));
-    chatInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            sendChatMessage(chatInput.value);
-        }
-    });
+    if (btnSendChat) {
+        btnSendChat.addEventListener("click", () => sendChatMessage(chatInput.value));
+    }
+    if (chatInput) {
+        chatInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage(chatInput.value);
+            }
+        });
+    }
 
-    promptChips.forEach(chip => {
-        chip.addEventListener("click", () => {
-            const q = chip.dataset.query;
+    promptPills.forEach(pill => {
+        pill.addEventListener("click", () => {
+            const q = pill.dataset.query;
             chatInput.value = q;
             sendChatMessage(q);
         });
@@ -418,21 +437,22 @@ document.addEventListener("DOMContentLoaded", () => {
     // ==========================================
     // MULTI-STRATEGY BENCHMARK INSPECTOR
     // ==========================================
-    btnRunBenchmark.addEventListener("click", runBenchmark);
-    inspectorQueryInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") runBenchmark();
-    });
+    if (btnRunBenchmark) btnRunBenchmark.addEventListener("click", runBenchmark);
+    if (inspectorQueryInput) {
+        inspectorQueryInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") runBenchmark();
+        });
+    }
 
     async function runBenchmark() {
         const query = inspectorQueryInput.value.trim();
         if (!query) return;
 
         btnRunBenchmark.disabled = true;
-        btnRunBenchmark.innerHTML = `<i data-lucide="loader" class="spin"></i> Running...`;
+        btnRunBenchmark.innerHTML = `<span>Scoring...</span><span class="btn-icon-tray-sm"><i data-lucide="loader" class="spin"></i></span>`;
 
-        // Clear existing cards
         [denseCards, bm25Cards, hybridCards, rerankCards].forEach(c => {
-            c.innerHTML = `<div class="empty-state">Scoring...</div>`;
+            c.innerHTML = `<div class="empty-state-card">Computing relevance...</div>`;
         });
 
         try {
@@ -451,19 +471,15 @@ document.addEventListener("DOMContentLoaded", () => {
             if (data.status === "success") {
                 const s = data.strategies;
 
-                // 1. Dense
                 denseTimer.textContent = `${(s.dense.retrieval_time_seconds * 1000).toFixed(1)} ms`;
                 renderStrategyCards(denseCards, s.dense.final_chunks, "dense");
 
-                // 2. BM25
                 bm25Timer.textContent = `${(s.bm25.retrieval_time_seconds * 1000).toFixed(1)} ms`;
                 renderStrategyCards(bm25Cards, s.bm25.final_chunks, "bm25");
 
-                // 3. Hybrid RRF
                 hybridTimer.textContent = `${(s.hybrid.retrieval_time_seconds * 1000).toFixed(1)} ms`;
                 renderStrategyCards(hybridCards, s.hybrid.final_chunks, "hybrid");
 
-                // 4. Re-ranker
                 rerankTimer.textContent = `${(s.hybrid_rerank.retrieval_time_seconds * 1000).toFixed(1)} ms`;
                 renderStrategyCards(rerankCards, s.hybrid_rerank.final_chunks, "rerank");
             }
@@ -471,21 +487,21 @@ document.addEventListener("DOMContentLoaded", () => {
             alert("Benchmark failed: " + err.message);
         } finally {
             btnRunBenchmark.disabled = false;
-            btnRunBenchmark.innerHTML = `<i data-lucide="play"></i> Run Comparison`;
+            btnRunBenchmark.innerHTML = `<span>Run Benchmark</span><span class="btn-icon-tray-sm"><i data-lucide="play"></i></span>`;
             lucide.createIcons();
         }
     }
 
     function renderStrategyCards(container, chunks, type) {
         if (!chunks || chunks.length === 0) {
-            container.innerHTML = `<div class="empty-state">No matching chunks found</div>`;
+            container.innerHTML = `<div class="empty-state-card">No matching passages found</div>`;
             return;
         }
 
         container.innerHTML = chunks.map((c, idx) => {
             const rank = idx + 1;
             let scoreDisplay = "";
-            let badgeClass = `rank-badge rank-badge-${type}`;
+            let chipClass = `rank-chip rank-chip-${type}`;
 
             if (type === "dense") scoreDisplay = `Cosine: ${c.score.toFixed(4)}`;
             else if (type === "bm25") scoreDisplay = `BM25: ${c.score.toFixed(2)}`;
@@ -493,15 +509,15 @@ document.addEventListener("DOMContentLoaded", () => {
             else if (type === "rerank") scoreDisplay = `Re-Rank: ${c.score.toFixed(4)}`;
 
             return `
-                <div class="retrieval-card" onclick="window.viewChunk('${encodeURIComponent(JSON.stringify(c))}')">
-                    <div class="card-top-row">
-                        <span class="${badgeClass}">Rank #${rank}</span>
-                        <span class="score-text">${scoreDisplay}</span>
+                <div class="inspect-card" onclick="window.viewChunk('${encodeURIComponent(JSON.stringify(c))}')">
+                    <div class="card-top">
+                        <span class="${chipClass}">Rank #${rank}</span>
+                        <span class="score-mono">${scoreDisplay}</span>
                     </div>
-                    <div class="card-source-row">
+                    <div class="card-source-tag">
                         <span>📄 ${c.source} · Page ${c.page_number}</span>
                     </div>
-                    <div class="card-snippet">
+                    <div class="card-body-snippet">
                         ${c.content.substring(0, 140)}...
                     </div>
                 </div>
@@ -509,7 +525,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }).join("");
     }
 
-    // Global helper for card clicks
     window.viewChunk = function(encoded) {
         try {
             const chunk = JSON.parse(decodeURIComponent(encoded));
@@ -534,8 +549,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function renderChunksTable() {
-        const query = chunkSearchInput.value.toLowerCase();
-        const sourceFilter = chunkSourceFilter.value;
+        if (!chunksTableBody) return;
+        const query = chunkSearchInput ? chunkSearchInput.value.toLowerCase() : "";
+        const sourceFilter = chunkSourceFilter ? chunkSourceFilter.value : "all";
 
         const filtered = state.chunks.filter(c => {
             const matchQuery = !query || c.content.toLowerCase().includes(query) || c.chunk_id.toLowerCase().includes(query);
@@ -544,14 +560,14 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (filtered.length === 0) {
-            chunksTableBody.innerHTML = `<tr><td colspan="6" class="text-center">No matching chunks found</td></tr>`;
+            chunksTableBody.innerHTML = `<tr><td colspan="6" class="text-center-muted">No matching chunks found</td></tr>`;
             return;
         }
 
         chunksTableBody.innerHTML = filtered.map(c => `
             <tr>
                 <td style="font-family: var(--font-mono);">${c.chunk_index + 1}</td>
-                <td style="font-family: var(--font-mono); color: var(--accent-cyan); font-size: 0.75rem;">${c.chunk_id}</td>
+                <td style="font-family: var(--font-mono); color: var(--accent-cyan); font-size: 0.72rem;">${c.chunk_id}</td>
                 <td>${c.source}</td>
                 <td>Page ${c.page_number}</td>
                 <td>${c.char_count}</td>
@@ -562,78 +578,90 @@ document.addEventListener("DOMContentLoaded", () => {
         `).join("");
     }
 
-    chunkSearchInput.addEventListener("input", renderChunksTable);
-    chunkSourceFilter.addEventListener("change", renderChunksTable);
+    if (chunkSearchInput) chunkSearchInput.addEventListener("input", renderChunksTable);
+    if (chunkSourceFilter) chunkSourceFilter.addEventListener("change", renderChunksTable);
 
     // ==========================================
     // MODALS
     // ==========================================
     function openSettingsModal() {
-        geminiKeyInput.value = state.apiKey;
-        settingsModal.classList.add("open");
+        if (geminiKeyInput) geminiKeyInput.value = state.apiKey;
+        if (settingsModal) settingsModal.classList.add("open");
     }
     function closeSettingsModal() {
-        settingsModal.classList.remove("open");
+        if (settingsModal) settingsModal.classList.remove("open");
     }
 
-    btnOpenSettings.addEventListener("click", openSettingsModal);
-    btnCloseSettings.addEventListener("click", closeSettingsModal);
-    btnCancelSettings.addEventListener("click", closeSettingsModal);
+    if (btnOpenSettings) btnOpenSettings.addEventListener("click", openSettingsModal);
+    if (btnCloseSettings) btnCloseSettings.addEventListener("click", closeSettingsModal);
+    if (btnCancelSettings) btnCancelSettings.addEventListener("click", closeSettingsModal);
 
-    btnSaveSettings.addEventListener("click", async () => {
-        const key = geminiKeyInput.value.trim();
-        state.apiKey = key;
-        localStorage.setItem("scholar_rag_api_key", key);
+    if (btnSaveSettings) {
+        btnSaveSettings.addEventListener("click", async () => {
+            const key = geminiKeyInput.value.trim();
+            state.apiKey = key;
+            localStorage.setItem("scholar_rag_api_key", key);
 
-        await fetch("/api/update-config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ gemini_api_key: key })
+            await fetch("/api/update-config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ gemini_api_key: key })
+            });
+
+            closeSettingsModal();
+            await fetchStats();
+            showToast("Configuration saved successfully!");
         });
-
-        closeSettingsModal();
-        await fetchStats();
-        showToast("Configuration saved successfully!");
-    });
+    }
 
     function openExcerptModal(chunk) {
-        excerptModalTitle.innerHTML = `<i data-lucide="file-text"></i> ${chunk.source} (Page ${chunk.page_number})`;
-        excerptModalMeta.innerHTML = `Chunk ID: <b>${chunk.chunk_id || 'N/A'}</b> | Length: <b>${chunk.content.length} chars</b> | Score: <b>${chunk.score || 'N/A'}</b>`;
-        excerptModalContent.textContent = chunk.content;
-        excerptModal.classList.add("open");
+        if (excerptModalTitle) {
+            excerptModalTitle.innerHTML = `<i data-lucide="file-text" class="modal-icon"></i> <h3>${chunk.source} (Page ${chunk.page_number})</h3>`;
+        }
+        if (excerptModalMeta) {
+            excerptModalMeta.innerHTML = `Chunk ID: <b>${chunk.chunk_id || 'N/A'}</b> | Length: <b>${chunk.content.length} chars</b> | Score: <b>${chunk.score !== undefined ? chunk.score : 'N/A'}</b>`;
+        }
+        if (excerptModalContent) {
+            excerptModalContent.textContent = chunk.content;
+        }
+        if (excerptModal) excerptModal.classList.add("open");
         lucide.createIcons();
     }
-    function closeExcerptModal() {
-        excerptModal.classList.remove("open");
-    }
-    btnCloseExcerpt.addEventListener("click", closeExcerptModal);
 
-    // Close on backdrop click
+    function closeExcerptModal() {
+        if (excerptModal) excerptModal.classList.remove("open");
+    }
+    if (btnCloseExcerpt) btnCloseExcerpt.addEventListener("click", closeExcerptModal);
+
     [settingsModal, excerptModal].forEach(modal => {
-        modal.addEventListener("click", (e) => {
-            if (e.target === modal) modal.classList.remove("open");
-        });
+        if (modal) {
+            modal.addEventListener("click", (e) => {
+                if (e.target === modal) modal.classList.remove("open");
+            });
+        }
     });
 
-    // Toast helper
+    // Toast Alert
     function showToast(msg) {
         const toast = document.createElement("div");
         toast.style.position = "fixed";
-        toast.style.bottom = "20px";
-        toast.style.right = "20px";
-        toast.style.background = "linear-gradient(135deg, var(--accent-indigo), #4F46E5)";
+        toast.style.bottom = "24px";
+        toast.style.right = "24px";
+        toast.style.background = "linear-gradient(135deg, rgba(6, 182, 212, 0.9), rgba(99, 102, 241, 0.9))";
+        toast.style.backdropFilter = "blur(12px)";
         toast.style.color = "#FFF";
-        toast.style.padding = "10px 18px";
-        toast.style.borderRadius = "8px";
-        toast.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";
+        toast.style.padding = "10px 20px";
+        toast.style.borderRadius = "var(--radius-pill)";
+        toast.style.border = "1px solid rgba(255, 255, 255, 0.2)";
+        toast.style.boxShadow = "0 8px 32px rgba(0,0,0,0.5)";
         toast.style.zIndex = "9999";
-        toast.style.fontSize = "0.85rem";
+        toast.style.fontSize = "0.82rem";
         toast.style.fontWeight = "600";
         toast.textContent = msg;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3500);
     }
 
-    // Initial Load
+    // Initialize
     fetchStats();
 });
